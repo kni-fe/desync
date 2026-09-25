@@ -1,3 +1,10 @@
+--[[
+	ui-engine-v2
+	version 1.3a
+	by Singularity (V3rm @ King Singularity) (Discord @ Singularity#5490)
+--]]
+
+-- UI performance pass: static theme colors, direct drag updates, event-driven folders.
 local ui_options = {
 	main_color = Color3.fromRGB(41, 74, 122),
 	min_size = Vector2.new(400, 300),
@@ -1084,18 +1091,11 @@ function library:AddWindow(title, options)
 		local topImage = barFrame:FindFirstChild("Top")
 		local SplitFrame = windowObject:FindFirstChild("TabSelection"):FindFirstChild("Frame")
 
-		task.spawn(function()
-			while true do
-				barFrame.BackgroundColor3 = options.main_color
-				baseImage.BackgroundColor3 = options.main_color
-				baseImage.ImageColor3 = options.main_color
-				topImage.ImageColor3 = options.main_color
-				SplitFrame.BackgroundColor3 = options.main_color
-
-				RS.Heartbeat:Wait()
-			end
-		end)
-
+		barFrame.BackgroundColor3 = options.main_color
+		baseImage.BackgroundColor3 = options.main_color
+		baseImage.ImageColor3 = options.main_color
+		topImage.ImageColor3 = options.main_color
+		SplitFrame.BackgroundColor3 = options.main_color
 	end
 
 	local resizeHandle = windowObject:WaitForChild("Resizer")
@@ -1277,21 +1277,14 @@ function library:AddWindow(title, options)
 						callback = typeof(callback) == "function" and callback or function()end
 
 						local button = Prefabs:FindFirstChild("Button"):Clone()
+						local buttonBase = button:GetChildren()[1]
 
 						button.Parent = new_tab
 						button.Text = button_text
 						button.Size = UDim2.new(0, gNameLen(button), 0, 20)
 						button.ZIndex = button.ZIndex + (windows * 10)
-						button:GetChildren()[1].ZIndex = button:GetChildren()[1].ZIndex + (windows * 10)
-
-						task.spawn(function()
-							while true do
-								if button and button:GetChildren()[1] then
-									button:GetChildren()[1].ImageColor3 = options.main_color
-								end
-								RS.Heartbeat:Wait()
-							end
-						end)
+						buttonBase.ZIndex = buttonBase.ZIndex + (windows * 10)
+						buttonBase.ImageColor3 = options.main_color
 
 						button.MouseButton1Click:Connect(function()
 							ripple(button, mouse.X, mouse.Y)
@@ -1300,7 +1293,6 @@ function library:AddWindow(title, options)
 
 						return button
 					end
-
 					function tab_data:AddSwitch(switch_text, callback) -- [Switch]
 						local switch_data = {}
 
@@ -1308,22 +1300,15 @@ function library:AddWindow(title, options)
 						callback = typeof(callback) == "function" and callback or function()end
 
 						local switch = Prefabs:FindFirstChild("Switch"):Clone()
+						local title = switch:FindFirstChild("Title")
+						local switchBase = switch:GetChildren()[1]
 
 						switch.Parent = new_tab
-						switch:FindFirstChild("Title").Text = switch_text
-
-						switch:FindFirstChild("Title").ZIndex = switch:FindFirstChild("Title").ZIndex + (windows * 10)
+						title.Text = switch_text
+						title.ZIndex = title.ZIndex + (windows * 10)
 						switch.ZIndex = switch.ZIndex + (windows * 10)
-						switch:GetChildren()[1].ZIndex = switch:GetChildren()[1].ZIndex + (windows * 10)
-
-						task.spawn(function()
-							while true do
-								if switch and switch:GetChildren()[1] then
-									switch:GetChildren()[1].ImageColor3 = options.main_color
-								end
-								RS.Heartbeat:Wait()
-							end
-						end)
+						switchBase.ZIndex = switchBase.ZIndex + (windows * 10)
+						switchBase.ImageColor3 = options.main_color
 
 						local toggled = false
 						switch.MouseButton1Click:Connect(function()
@@ -1340,7 +1325,6 @@ function library:AddWindow(title, options)
 
 						return switch_data, switch
 					end
-
 					function tab_data:AddTextBox(textbox_text, callback, textbox_options)
 						textbox_text = tostring(textbox_text or "New TextBox")
 						callback = typeof(callback) == "function" and callback or function()end
@@ -1430,7 +1414,7 @@ function library:AddWindow(title, options)
 													size = max
 												end
 
-												Resize(indicator, {Size = UDim2.new(size or min, 0, 0, 20)}, options.tween_time)
+												indicator.Size = UDim2.new(size or min, 0, 0, 20)
 												local percentage = math.floor((size or min) * 100)
 
 												local maxv = slider_options.max
@@ -1694,43 +1678,61 @@ function library:AddWindow(title, options)
 							saturation_indicator.ZIndex = saturation_indicator.ZIndex + (windows * 10)
 
 							local Held = false
-							UIS.InputBegan:Connect(function(inputObject)
+							local activeDrag = nil
+
+							local function startDrag(kind)
+								if Held then return end
+								Held = true
+								activeDrag = kind
+								windowObject.Draggable = false
+
+								task.spawn(function()
+									while Held and activeDrag and (not dropdown_open) do
+										local mouse_location = gMouse()
+
+										if activeDrag == "palette" then
+											local width = math.max(1, palette.AbsoluteSize.X)
+											local height = math.max(1, palette.AbsoluteSize.Y)
+											local px = math.clamp(mouse_location.X - palette.AbsolutePosition.X, 0, width)
+											local py = math.clamp(mouse_location.Y - palette.AbsolutePosition.Y, 0, height)
+
+											h = math.clamp(px / width, 0, 1)
+											s = math.clamp(1 - (py / height), 0, 1)
+											palette_indicator.Position = UDim2.fromOffset(
+												math.clamp(px - (palette_indicator.AbsoluteSize.X / 2), 0, math.max(0, width - palette_indicator.AbsoluteSize.X)),
+												math.clamp(py - (palette_indicator.AbsoluteSize.Y / 2), 0, math.max(0, height - palette_indicator.AbsoluteSize.Y))
+											)
+										else
+											local height = math.max(1, saturation.AbsoluteSize.Y)
+											local y = math.clamp(mouse_location.Y - saturation.AbsolutePosition.Y, 0, height)
+											v = math.clamp(1 - (y / height), 0, 1)
+											local indicatorY = math.clamp(y - (saturation_indicator.AbsoluteSize.Y / 2), 0, math.max(0, height - saturation_indicator.AbsoluteSize.Y))
+											saturation_indicator.Position = UDim2.fromOffset(0, indicatorY)
+										end
+
+										update()
+										RS.Heartbeat:Wait()
+									end
+								end)
+							end
+
+							palette.InputBegan:Connect(function(inputObject)
 								if inputObject.UserInputType == Enum.UserInputType.MouseButton1 then
-									Held = true
-
-									task.spawn(function() -- Loop check
-										while Held and Entered1 and (not dropdown_open) do -- Palette
-											local mouse_location = gMouse()
-
-											local x = ((palette.AbsoluteSize.X - (mouse_location.X - palette.AbsolutePosition.X)) + 1)
-											local y = ((palette.AbsoluteSize.Y - (mouse_location.Y - palette.AbsolutePosition.Y)) + 1.5)
-
-											local color = Color3.fromHSV(x / 100, y / 100, 0)
-											h = x / 100
-											s = y / 100
-
-											Resize(palette_indicator, {Position = UDim2.new(0, math.abs(x - 100) - (palette_indicator.AbsoluteSize.X / 2), 0, math.abs(y - 100) - (palette_indicator.AbsoluteSize.Y / 2))}, options.tween_time)
-
-											update()
-											RS.Heartbeat:Wait()
-										end
-
-										while Held and Entered2 and (not dropdown_open) do -- Saturation
-											local mouse_location = gMouse()
-											local y = ((palette.AbsoluteSize.Y - (mouse_location.Y - palette.AbsolutePosition.Y)) + 1.5)
-											v = y / 100
-
-											Resize(saturation_indicator, {Position = UDim2.new(0, 0, 0, math.abs(y - 100))}, options.tween_time)
-
-											update()
-											RS.Heartbeat:Wait()
-										end
-									end)
+									startDrag("palette")
 								end
 							end)
+
+							saturation.InputBegan:Connect(function(inputObject)
+								if inputObject.UserInputType == Enum.UserInputType.MouseButton1 then
+									startDrag("saturation")
+								end
+							end)
+
 							UIS.InputEnded:Connect(function(inputObject)
 								if inputObject.UserInputType == Enum.UserInputType.MouseButton1 then
 									Held = false
+									activeDrag = nil
+									windowObject.Draggable = true
 								end
 							end)
 
@@ -2057,52 +2059,43 @@ function library:AddWindow(title, options)
 						local button = folder:FindFirstChild("Button")
 						local objects = folder:FindFirstChild("Objects")
 						local toggle = button:FindFirstChild("Toggle")
+						local buttonBase = button:GetChildren()[1]
+
 						folder.ZIndex = folder.ZIndex + (windows * 10)
 						button.ZIndex = button.ZIndex + (windows * 10)
 						objects.ZIndex = objects.ZIndex + (windows * 10)
 						toggle.ZIndex = toggle.ZIndex + (windows * 10)
-						button:GetChildren()[1].ZIndex = button:GetChildren()[1].ZIndex + (windows * 10)
+						buttonBase.ZIndex = buttonBase.ZIndex + (windows * 10)
 
 						folder.Parent = new_tab
 						button.Text = "      " .. folder_name
+						buttonBase.ImageColor3 = options.main_color
 
-						task.spawn(function()
-							while true do
-								if button and button:GetChildren()[1] then
-									button:GetChildren()[1].ImageColor3 = options.main_color
-								end
-								RS.Heartbeat:Wait()
-							end
-						end)
-
+						local open = false
 						local function gFolderLen()
 							local n = 25
-							for i,v in next, objects:GetChildren() do
-								if not (v:IsA("UIListLayout")) then
+							for _, v in next, objects:GetChildren() do
+								if not v:IsA("UIListLayout") then
 									n = n + v.AbsoluteSize.Y + 5
 								end
 							end
 							return n
 						end
 
-						local open = false
+						local function refreshFolderSize(animate)
+							local size = UDim2.new(1, 0, 0, open and gFolderLen() or 24)
+							if animate then
+								Resize(folder, {Size = size}, options.tween_time)
+							else
+								folder.Size = size
+							end
+						end
+
 						button.MouseButton1Click:Connect(function()
-							if open then -- Close
-								Resize(toggle, {Rotation = 0}, options.tween_time)
-								objects.Visible = false
-							else -- Open
-								Resize(toggle, {Rotation = 90}, options.tween_time)
-								objects.Visible = true
-							end
-
 							open = not open
-						end)
-
-						task.spawn(function()
-							while true do
-								Resize(folder, {Size = UDim2.new(1, 0, 0, (open and gFolderLen() or 24))}, options.tween_time)
-								task.wait()
-							end
+							Resize(toggle, {Rotation = open and 90 or 0}, options.tween_time)
+							objects.Visible = open
+							refreshFolderSize(true)
 						end)
 
 						for i,v in next, tab_data do
@@ -2113,18 +2106,21 @@ function library:AddWindow(title, options)
 									data = ret[1]
 									object = ret[2]
 									object.Parent = objects
+									refreshFolderSize(false)
 									return data, object
 								else
 									object = ret[1]
 									object.Parent = objects
+									refreshFolderSize(false)
 									return object
 								end
 							end
 						end
 
+						refreshFolderSize(false)
+
 						return folder_data, folder
 					end
-
 				end
 
 				return tab_data, new_tab
@@ -2154,41 +2150,19 @@ local hooked = false
 local shouldBlock = false
 local blockWindowStart = 0
 local blockWindowEnd = 0
-local blockDurationSeconds = 0
 local activeMode = "Off"
 local modeToken = 0
 local modeThread = nil
 
 local function isBlockingNow(now)
     now = now or os.clock()
-
-    if not shouldBlock then
-        return false
-    end
-
-    -- A block window is armed before traffic arrives, but its timer starts
-    -- on the first packet that is actually intercepted.
-    if blockWindowStart == 0 then
-        return true
-    end
-
-    return now < blockWindowEnd
-end
-
-local function armBlockWindow(durationMs)
-    local duration = math.max(0, tonumber(durationMs) or 0) / 1000
-
-    shouldBlock = true
-    blockDurationSeconds = duration
-    blockWindowStart = 0
-    blockWindowEnd = 0
+    return shouldBlock and now >= blockWindowStart and now < blockWindowEnd
 end
 
 local function clearBlockWindow()
     shouldBlock = false
     blockWindowStart = 0
     blockWindowEnd = 0
-    blockDurationSeconds = 0
 end
 
 local function isBlockedPacket(packetId)
@@ -2203,29 +2177,15 @@ end
 local recordMovementPacketPose
 
 local function raknetSendHook(packet)
-    if not isBlockedPacket(packet.PacketId) then
-        return
-    end
-
-    local now = os.clock()
-
-    if shouldBlock then
-        if blockWindowStart == 0 then
-            blockWindowStart = now
-            blockWindowEnd = now + blockDurationSeconds
-        end
-
-        if now < blockWindowEnd then
+    if isBlockedPacket(packet.PacketId) then
+        if isBlockingNow() then
             packet:Block()
             return
         end
 
-        -- The first packet after the deadline is the first packet that can
-        -- establish the real post-block replication boundary.
-        shouldBlock = false
+        -- Treat only an actually released packet as the replication boundary.
+        recordMovementPacketPose()
     end
-
-    recordMovementPacketPose()
 end
 
 local function installHook()
@@ -2697,18 +2657,6 @@ local function waitUntil(targetTime, mode, token)
     return false
 end
 
-local function waitForBlockStart(mode, token)
-    while activeMode == mode and modeToken == token do
-        if blockWindowStart > 0 then
-            return true
-        end
-
-        task.wait()
-    end
-
-    return false
-end
-
 local function setMode(mode)
     mode = tostring(mode)
 
@@ -2734,9 +2682,8 @@ local function setMode(mode)
 
     if mode == "Blink" then
         shouldBlock = true
-        blockWindowStart = 0
+        blockWindowStart = os.clock()
         blockWindowEnd = math.huge
-        blockDurationSeconds = math.huge
         return
     end
 
@@ -2745,16 +2692,12 @@ local function setMode(mode)
             if mode == "Static" then
                 local blockMs = math.max(1, math.floor(config.StaticBlockMs))
                 local moveMs = math.max(1, math.floor(config.StaticMoveMs))
+                local blockStart = os.clock()
+                local blockEnd = blockStart + (blockMs / 1000)
 
-                -- Arm the block without starting its clock yet. The hook starts
-                -- the timer on the first packet that is actually blocked.
-                armBlockWindow(blockMs)
-
-                if not waitForBlockStart(mode, token) then
-                    break
-                end
-
-                local blockEnd = blockWindowEnd
+                shouldBlock = true
+                blockWindowStart = blockStart
+                blockWindowEnd = blockEnd
 
                 if not waitUntil(blockEnd, mode, token) then
                     break
@@ -2762,10 +2705,7 @@ local function setMode(mode)
 
                 shouldBlock = false
 
-                -- Keep the movement window tied to the actual block deadline,
-                -- not to when the scheduler happened to wake up.
-                local moveEnd = blockEnd + (moveMs / 1000)
-                if not waitUntil(moveEnd, mode, token) then
+                if not waitUntil(blockEnd + (moveMs / 1000), mode, token) then
                     break
                 end
 
@@ -2779,15 +2719,12 @@ local function setMode(mode)
                 local randomMax = math.max(randomMin, math.ceil(center + halfRange))
                 local blockMs = math.random(randomMin, randomMax)
                 local moveMs = math.max(1, math.floor(config.DynMoveMs))
+                local blockStart = os.clock()
+                local blockEnd = blockStart + (blockMs / 1000)
 
-                -- Same packet-anchored timing as Static mode.
-                armBlockWindow(blockMs)
-
-                if not waitForBlockStart(mode, token) then
-                    break
-                end
-
-                local blockEnd = blockWindowEnd
+                shouldBlock = true
+                blockWindowStart = blockStart
+                blockWindowEnd = blockEnd
 
                 if not waitUntil(blockEnd, mode, token) then
                     break
@@ -2795,8 +2732,7 @@ local function setMode(mode)
 
                 shouldBlock = false
 
-                local moveEnd = blockEnd + (moveMs / 1000)
-                if not waitUntil(moveEnd, mode, token) then
+                if not waitUntil(blockEnd + (moveMs / 1000), mode, token) then
                     break
                 end
             else
@@ -2831,65 +2767,6 @@ local MainWindow = library:AddWindow("knife.lua", {
 local Main = MainWindow:AddTab("Main")
 local GhostTab = MainWindow:AddTab("Ghost")
 local ConfigTab = MainWindow:AddTab("Config")
-local ChangelogTab, ChangelogFrame = MainWindow:AddTab("Changelogs")
-
-local CHANGELOG_ENTRIES = {
-    {
-        Version = "Current",
-        Changes = {
-            "More accurate millisecond block timing using deadline-based timing.",
-            "Dynamic mode randomization support.",
-            "Server-position ghost estimation and configurable ghost visualization.",
-            "Config save/load/overwrite/delete support.",
-            "Instance replacement with live settings transfer between executions.",
-        },
-    },
-    {
-    Version = "knife.lua v2.0 — Summary",
-    Changes = {
-        "Full rewrite with rebuilt RakNet timing and hook handling.",
-        "Improved ghost with packet-based tracking and ping compensation.",
-        "New multi-profile config system with re-execution persistence.",
-        "Added executor compatibility and filesystem capability checks.",
-        "Added Config and Changelogs tabs with millisecond-based controls.",
-        "GPL-3.0 open source with cleaner re-execution and various fixes.",
-    },
-},
-}
-
-local changelogScroll = Instance.new("ScrollingFrame")
-changelogScroll.Name = "ChangelogScroll"
-changelogScroll.Parent = ChangelogFrame
-changelogScroll.BackgroundTransparency = 1
-changelogScroll.BorderSizePixel = 0
-changelogScroll.Position = UDim2.new(0, 0, 0, 0)
-changelogScroll.Size = UDim2.new(1, 0, 1, 0)
-changelogScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-changelogScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-changelogScroll.ScrollBarThickness = 5
-changelogScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-changelogScroll.ClipsDescendants = true
-
-local changelogLayout = Instance.new("UIListLayout")
-changelogLayout.Parent = changelogScroll
-changelogLayout.SortOrder = Enum.SortOrder.LayoutOrder
-changelogLayout.Padding = UDim.new(0, 5)
-
-local changelogPadding = Instance.new("UIPadding")
-changelogPadding.Parent = changelogScroll
-changelogPadding.PaddingBottom = UDim.new(0, 8)
-
-for _, entry in ipairs(CHANGELOG_ENTRIES) do
-    local section, sectionFrame = ChangelogTab:AddFolder(tostring(entry.Version or "Update"))
-    sectionFrame.Parent = changelogScroll
-    for _, change in ipairs(entry.Changes or {}) do
-        local label = section:AddLabel("• " .. tostring(change))
-        label.Size = UDim2.new(1, -8, 0, 20)
-        label.AutomaticSize = Enum.AutomaticSize.Y
-        label.TextWrapped = true
-        label.TextYAlignment = Enum.TextYAlignment.Top
-    end
-end
 
 local BlinkSection = Main:AddFolder("Blink")
 local StaticSection = Main:AddFolder("Static")
